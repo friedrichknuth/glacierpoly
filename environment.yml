@@ -1,0 +1,21 @@
+name: glacierpoly
+channels:
+  - conda-forge
+dependencies:
+  - black
+  - cartopy
+  - contextily
+  - geopandas
+  - geoviews
+  - holoviews
+  - hvplot
+  - matplotlib
+  - numpy
+  - panel
+  - pyepsg
+  - rasterio
+  - shapely
+  - xarray
+  - pip
+  - pip:
+    - "git+https://github.com/friedrichknuth/driveanon.git#egg=driveanon"
