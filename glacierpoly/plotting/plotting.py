@@ -7,29 +7,26 @@ import glob
 import os
 
 
-def plot_tif(tif_file, 
-             glacier_outline_gdf=None,
-             cmap=None,
-             vmin=None,
-             vmax=None,
-             cbar_fraction=0.035):
-    
-    source = rasterio.open(tif_file)
-    
+def plot_tif(
+    tif_file,
+    glacier_outline_gdf=None,
+    cmap=None,
+    vmin=None,
+    vmax=None,
+    cbar_fraction=0.035,
+):
 
+    source = rasterio.open(tif_file)
 
     fig, ax = plt.subplots(figsize=(10, 10))
-    
-    sm = ax.imshow(source.read(1), 
-                         cmap=cmap, 
-                         vmin=vmin, 
-                         vmax=vmax)
+
+    sm = ax.imshow(source.read(1), cmap=cmap, vmin=vmin, vmax=vmax)
 
     crs = cartopy.crs.epsg(source.crs.to_epsg())
 
     ax = plt.axes(projection=crs)
 
-    show(source, cmap=cmap, ax=ax, interpolation="none",vmin=vmin,vmax=vmax)
+    show(source, cmap=cmap, ax=ax, interpolation="none", vmin=vmin, vmax=vmax)
 
     gl = ax.gridlines(draw_labels=True, x_inline=False, y_inline=False)
 
