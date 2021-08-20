@@ -1,10 +1,45 @@
-import matplotlib.pyplot as plt
 import cartopy
-import rasterio
-from rasterio.plot import show
 import geopandas as gpd
 import glob
+import matplotlib.pyplot as plt
 import os
+from pathlib import Path
+import rasterio
+from rasterio.plot import show
+
+
+def create_detection_qc_gallery(
+    arrays, detected_polygon_gdf, output_directory, difference_map_file, merged=None
+):
+
+    file_name = str(Path(difference_map_file).stem)
+    # create qc plots
+    fig = plt.figure(figsize=(10, 7))
+    qc_plot_file_name = "qc_plot_" + file_name.split("_")[-1]
+    fig.suptitle(qc_plot_file_name)
+    rows = 2
+    columns = 3
+    for i in range(rows * columns):
+        try:
+            arr = arrays[i]
+            ax = plt.subplot(rows, columns, i + 1)
+            ax.imshow(arr)
+            ax.set_xticks(())
+            ax.set_yticks(())
+        except:
+            try:
+                ax = plt.subplot(rows, columns, i + 1)
+                try:
+                    merged.plot(ax=ax)
+                except:
+                    pass
+                detected_polygon_gdf.plot(ax=ax, color="r")
+                ax.set_xticks(())
+                ax.set_yticks(())
+            except:
+                pass
+    fig.savefig(os.path.join(output_directory, qc_plot_file_name + ".jpg"))
+    plt.close()
 
 
 def plot_tif(

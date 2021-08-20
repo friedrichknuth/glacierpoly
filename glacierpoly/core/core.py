@@ -2,12 +2,14 @@ import os
 from pathlib import Path
 import glob
 import geopandas as gpd
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, MultiPolygon
+from shapely.ops import polygonize
 import pandas as pd
 import rasterio
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import img2pdf
 from skimage.io import imshow
 from skimage.morphology import (
     erosion,
@@ -48,16 +50,16 @@ def clip_area_beyond_previous_glacier_boundary(
 
     if keep_positive_change:
         print("not implemented")
-    #         if not difference_map_file:
-    #             print('must specify difference map file to get positive change areas')
+    #             if not difference_map_file:
+    #                 print('must specify difference map file to get positive change areas')
 
-    #         diff = diff.explode().reset_index().iloc[: , 2:]
-    #         diff_stats = zonal_stats(diff, difference_map_file)
-    #         mean_dods = []
-    #         for i in diff_stats:
-    #             mean_dods.append(i['mean'])
-    #         diff['mean_dod'] = mean_dods
-    #         diff = diff[diff['mean_dod'] < keep_positive_change_greater_than]
+    #             diff = diff.explode().reset_index().iloc[: , 2:]
+    #             diff_stats = zonal_stats(diff, difference_map_file)
+    #             mean_dods = []
+    #             for i in diff_stats:
+    #                 mean_dods.append(i['mean'])
+    #             diff['mean_dod'] = mean_dods
+    #             diff = diff[diff['mean_dod'] < keep_positive_change_greater_than]
 
     detected_polygon_gdf = gpd.overlay(detected_polygon_gdf, diff, how="difference")
     return detected_polygon_gdf
@@ -80,7 +82,7 @@ def clip_raster_by_buffer(
     gdf = gpd.read_file(reference_glacier_polygon_file)
 
     buffer = gdf.buffer(buffer_distance)
-    source = rasterio.open(difference_map_file, masked=True)
+    source = rasterio.open(difference_map_file)
     rio_mask_kwargs = {"filled": False, "crop": True, "indexes": 1}
     masked_array, transform = rasterio.mask.mask(source, buffer)
     array = masked_array.squeeze()
@@ -88,6 +90,38 @@ def clip_raster_by_buffer(
     array = np.uint8(array)
 
     return array
+
+
+def contour_polygon_by_elevation(input_dem_file, input_polygon_file, bins=10):
+    file_path = str(Path(input_dem_file).parent.resolve())
+    file_name = str(Path(input_dem_file).stem)
+    extention = "_contoured.geojson"
+    out = os.path.join(file_path, file_name + extention)
+
+    call = ["gdal_contour", "-a", "elev", input_dem_file, out, "-i", str(bins)]
+    subprocess.call(call)
+
+    df1 = gpd.read_file(out)
+    df2 = gpd.read_file(input_polygon_file)
+    df1 = df1.to_crs(df2.crs)
+
+    res_union = gpd.overlay(df1, df2, how="intersection")
+
+    input_p = df2["geometry"].iloc[0]
+    input_l = res_union.dissolve()["geometry"].iloc[0]
+
+    unioned = input_p.boundary.union(input_l)
+
+    keep_polys = [
+        poly
+        for poly in polygonize(unioned)
+        if poly.representative_point().within(input_p)
+    ]
+    mp = MultiPolygon(keep_polys)
+
+    gdf = gpd.GeoDataFrame(geometry=[mp], crs=df2.crs)
+    gdf.to_file(out, driver="GeoJSON")
+    return out
 
 
 def convert_glacier_array_to_gdf(array, transform, res, crs):
@@ -202,10 +236,10 @@ def detect_glacier(
 
     mask = label_im != max_area_index
     masked_array = np.ma.masked_array(label_im, mask=mask)
-    array = np.ma.filled(masked_array, fill_value=1)
-    array = array.astype(np.uint8)
+    detected_array = np.ma.filled(masked_array, fill_value=1)
+    detected_array = detected_array.astype(np.uint8)
 
-    return array
+    return array, canny, multi_dilated, area_closed, detected_array
 
 
 def find_largest_intersecting_detected_polygon(
@@ -220,18 +254,21 @@ def find_largest_intersecting_detected_polygon(
     detected_polygon_gdf = detected_polygon_gdf[
         detected_polygon_gdf.intersects(reference_polygon.geometry[0])
     ]
+    if not detected_polygon_gdf.empty:
+        # get largest polygon from multipolygon
+        detected_polygon_gdf = detected_polygon_gdf[
+            detected_polygon_gdf.area == detected_polygon_gdf.area.max()
+        ]
 
-    # get largest polygon from multipolygon
-    detected_polygon_gdf = detected_polygon_gdf[
-        detected_polygon_gdf.area == detected_polygon_gdf.area.max()
-    ]
+        # use exterior to get rid of islands
+        detected_polygon_gdf["geometry"] = Polygon(
+            detected_polygon_gdf["geometry"].iloc[0].exterior
+        )
 
-    # use exterior to get rid of islands
-    detected_polygon_gdf["geometry"] = Polygon(
-        detected_polygon_gdf["geometry"].iloc[0].exterior
-    )
-
-    return detected_polygon_gdf
+        return detected_polygon_gdf
+    else:
+        print("detected polygon does not intersect reference polygon")
+        return detected_polygon_gdf
 
 
 def get_raster_metadata(geotif):
@@ -260,6 +297,10 @@ def merge_with_undetected_high_elevation_areas(
 
     reference_glacier_polygon_gdf = gpd.read_file(reference_glacier_polygon_file)
     detected_polygon_gdf = gpd.read_file(detected_polygon_file)
+
+    # shrink reference glacier polygon to avoid it entirely surrounding detected
+    geom = reference_glacier_polygon_gdf.buffer(-10)
+    reference_glacier_polygon_gdf = gpd.GeoDataFrame(geometry=geom)
 
     # get max detected elevation
     max_caputed_elevation = zonal_stats(detected_polygon_file, reference_dem_file)[0][
@@ -317,6 +358,108 @@ def replace_and_fill_nodata_value(array, nodata_value, fill_value):
         masked_array = np.ma.filled(masked_array, fill_value=fill_value)
 
     return masked_array
+
+
+def run_detection(
+    reference_dem_file,
+    difference_maps_files,
+    reference_glacier_polygon_file,
+    output_directory="outputs",
+):
+    #     countoured_reference_glacier_polygon_file = contour_polygon_by_elevation(reference_dem_file,
+    #                                                                       reference_glacier_polygon_file,
+    #                                                                       bins=10)
+
+    Path(output_directory).mkdir(parents=True, exist_ok=True)
+
+    for difference_map_file in difference_maps_files:
+
+        file_name = str(Path(difference_map_file).stem)
+        print("processing", file_name)
+
+        transform, res, crs = gpoly.core.get_raster_metadata(difference_map_file)
+        array = gpoly.core.clip_raster_by_buffer(
+            difference_map_file, reference_glacier_polygon_file, buffer_distance=2000
+        )
+
+        arrays = gpoly.core.detect_glacier(array, erode_islands=True)
+
+        detected_array = arrays[-1]
+        detected_polygon_gdf = gpoly.core.convert_glacier_array_to_gdf(
+            detected_array, transform, res, crs
+        )
+
+        detected_polygon_gdf = gpoly.core.find_largest_intersecting_detected_polygon(
+            reference_glacier_polygon_file, detected_polygon_gdf
+        )
+
+        if detected_polygon_gdf.empty:
+            print("reattempting detection without eroding islands")
+            arrays = gpoly.core.detect_glacier(array, erode_islands=False)
+            detected_array = arrays[-1]
+            detected_polygon_gdf = gpoly.core.convert_glacier_array_to_gdf(
+                detected_array, transform, res, crs
+            )
+            detected_polygon_gdf = (
+                gpoly.core.find_largest_intersecting_detected_polygon(
+                    reference_glacier_polygon_file, detected_polygon_gdf
+                )
+            )
+            if detected_polygon_gdf.empty:
+                print("cant detect glacier for", difference_map_file)
+                break
+
+        detected_polygon_gdf = gpoly.core.clip_area_beyond_previous_glacier_boundary(
+            reference_glacier_polygon_file, detected_polygon_gdf
+        )
+
+        detected_polygon_file = gpoly.core.save_polygon_gdf_to_geojson(
+            detected_polygon_gdf,
+            output_directory,
+            "glacier_outline_detected_" + file_name.split("_")[-1],
+        )
+
+        try:
+            merged = gpoly.core.merge_with_undetected_high_elevation_areas(
+                reference_dem_file,
+                reference_glacier_polygon_file,
+                detected_polygon_file,
+            )
+
+            gpoly.plotting.create_detection_qc_gallery(
+                arrays,
+                detected_polygon_gdf,
+                output_directory,
+                difference_map_file,
+                merged=merged,
+            )
+            gpoly.core.save_polygon_gdf_to_geojson(
+                merged,
+                output_directory,
+                "glacier_outline_full_" + file_name.split("_")[-1],
+            )
+            #             reference_glacier_polygon_file = gpoly.core.save_polygon_gdf_to_geojson(merged,
+            #                                        output_directory,
+            #                                        'glacier_outline_full_'+ file_name.split('_')[-1])
+            print("SUCCESS\n")
+        except:
+            print("something went wrong")
+            print("check qc plot for", file_name)
+            gpoly.plotting.create_detection_qc_gallery(
+                arrays, detected_polygon_gdf, output_directory, difference_map_file
+            )
+            os.remove(
+                os.path.join(
+                    output_directory,
+                    "glacier_outline_detected_" + file_name.split("_")[-1] + ".geojson",
+                )
+            )
+            print("FAIL\n")
+            continue
+
+    # create pdf of qc plots
+    with open(os.path.join(output_directory, "qc_plots" + ".pdf"), "wb") as f:
+        f.write(img2pdf.convert(glob.glob(output_directory + "/*.jpg")))
 
 
 def save_polygon_gdf_to_geojson(
