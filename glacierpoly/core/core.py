@@ -303,7 +303,7 @@ def merge_with_undetected_high_elevation_areas(
     reference_glacier_polygon_gdf = gpd.GeoDataFrame(geometry=geom)
 
     # get max detected elevation
-    max_caputed_elevation = zonal_stats(detected_polygon_file, reference_dem_file)[0][
+    max_elevation = zonal_stats(reference_glacier_polygon_file, reference_dem_file)[0][
         "max"
     ]
 
@@ -316,12 +316,15 @@ def merge_with_undetected_high_elevation_areas(
     res_union = res_union[["geometry"]]
     stats = zonal_stats(res_union, reference_dem_file)
     max_elevations = []
+    counts = []
     for i in stats:
         max_elevations.append(i["max"])
+        counts.append(i["count"])
     res_union["max_elevations"] = max_elevations
+    res_union["counts"] = counts
 
     # merge where elevations area higher
-    remaining_area = res_union[res_union["max_elevations"] > max_caputed_elevation]
+    remaining_area = res_union[res_union["max_elevations"] > max_elevation-200]
     merged = detected_polygon_gdf.geometry.append(remaining_area.geometry)
     merged = gpd.GeoDataFrame(geometry=merged).reset_index(drop=True)
 
@@ -459,7 +462,7 @@ def run_detection(
 
     # create pdf of qc plots
     with open(os.path.join(output_directory, "qc_plots" + ".pdf"), "wb") as f:
-        f.write(img2pdf.convert(glob.glob(output_directory + "/*.jpg")))
+        f.write(img2pdf.convert(sorted(glob.glob(output_directory + "/*.jpg"))))
 
 
 def save_polygon_gdf_to_geojson(
