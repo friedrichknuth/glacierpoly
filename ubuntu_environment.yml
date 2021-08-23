@@ -289,6 +289,6 @@ dependencies:
   - pip:
     - beautifulsoup4==4.9.3
     - bs4==0.0.1
-    - driveanon==0.1.0
+    - "git+https://github.com/friedrichknuth/driveanon.git"
     - soupsieve==2.2
 prefix: /home/knuth/sw/miniconda3/envs/glacierpoly
