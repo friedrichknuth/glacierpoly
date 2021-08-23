@@ -5,6 +5,11 @@ dependencies:
   - black
   - cartopy
   - contextily
+  - opencv
+  - img2pdf
+  - scikit-image
+  - ipython
+  - ipykernel
   - geopandas
   - geoviews
   - holoviews
