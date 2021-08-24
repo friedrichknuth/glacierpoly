@@ -324,11 +324,11 @@ def merge_with_undetected_high_elevation_areas(
     res_union["counts"] = counts
 
     # merge where elevations area higher
-    remaining_area = res_union[res_union["max_elevations"] > max_elevation-200]
+    remaining_area = res_union[res_union["max_elevations"] > max_elevation - 200]
     merged = detected_polygon_gdf.geometry.append(remaining_area.geometry)
     merged = gpd.GeoDataFrame(geometry=merged).reset_index(drop=True)
 
-    # dissolve islands
+    # dissolve island polygons
     merged = merged.dissolve()
     merged = merged.explode().reset_index().iloc[:, 2:]
     geoms = []
@@ -336,6 +336,13 @@ def merge_with_undetected_high_elevation_areas(
         geoms.append(Polygon(merged["geometry"].iloc[i].exterior))
     merged["geometry"] = geoms
     merged = merged.dissolve()
+
+    #     # get rid of interior islands if inlet seperated by 10
+    #     tmp = gpd.GeoDataFrame(geometry=merged.buffer(10)).dissolve().explode().reset_index().iloc[: , 2:]
+    #     tmp = tmp[tmp.area == tmp.area.max()]
+    #     input_l = tmp.geometry.exterior.reset_index(drop=True).iloc[0]
+    #     merged = merged.geometry.append(gpd.GeoSeries([Polygon(input_l.coords)]))
+    #     merged = gpd.GeoDataFrame(geometry=merged).dissolve()
 
     return merged
 
@@ -367,6 +374,7 @@ def run_detection(
     reference_dem_file,
     difference_maps_files,
     reference_glacier_polygon_file,
+    ortho_files=None,
     output_directory="outputs",
 ):
     #     countoured_reference_glacier_polygon_file = contour_polygon_by_elevation(reference_dem_file,
@@ -375,7 +383,7 @@ def run_detection(
 
     Path(output_directory).mkdir(parents=True, exist_ok=True)
 
-    for difference_map_file in difference_maps_files:
+    for i, difference_map_file in enumerate(difference_maps_files):
 
         file_name = str(Path(difference_map_file).stem)
         print("processing", file_name)
@@ -436,7 +444,7 @@ def run_detection(
                 difference_map_file,
                 merged=merged,
             )
-            gpoly.core.save_polygon_gdf_to_geojson(
+            merged_polygon_file = gpoly.core.save_polygon_gdf_to_geojson(
                 merged,
                 output_directory,
                 "glacier_outline_full_" + file_name.split("_")[-1],
@@ -444,12 +452,36 @@ def run_detection(
             #             reference_glacier_polygon_file = gpoly.core.save_polygon_gdf_to_geojson(merged,
             #                                        output_directory,
             #                                        'glacier_outline_full_'+ file_name.split('_')[-1])
+            gpoly.plotting.plot_tif_with_polygons(
+                difference_map_file,
+                reference_glacier_polygon_file,
+                merged_polygon_file,
+                output_directory,
+                suffix="_01_dod_and_outlines",
+                cmap="RdBu",
+                vmin=-10,
+                vmax=10,
+            )
+
+            if ortho_files:
+                gpoly.plotting.plot_tif_with_polygons(
+                    ortho_files[i],
+                    reference_glacier_polygon_file,
+                    merged_polygon_file,
+                    output_directory,
+                    suffix="_02_ortho_and_outlines",
+                    cmap="Greys",
+                )
+
             print("SUCCESS\n")
         except:
             print("something went wrong")
             print("check qc plot for", file_name)
             gpoly.plotting.create_detection_qc_gallery(
-                arrays, detected_polygon_gdf, output_directory, difference_map_file
+                arrays,
+                detected_polygon_gdf,
+                os.path.join(output_directory, "failed"),
+                difference_map_file,
             )
             os.remove(
                 os.path.join(
