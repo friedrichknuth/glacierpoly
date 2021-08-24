@@ -1,4 +1,5 @@
 import cartopy
+import copy
 import geopandas as gpd
 import glob
 import matplotlib.pyplot as plt
@@ -119,11 +120,14 @@ def plot_tif_with_polygons(
     merged_polygon_file,
     output_directory,
     suffix=None,
-    cmap=None,
+    cmap_name=None,
     vmin=None,
     vmax=None,
     cbar_fraction=0.035,
 ):
+
+    cmap = copy.copy(plt.cm.get_cmap(cmap_name))
+    cmap.set_bad(color="black", alpha=1)
 
     Path(output_directory).mkdir(parents=True, exist_ok=True)
     file_name = str(Path(difference_map_file).stem)
@@ -144,6 +148,7 @@ def plot_tif_with_polygons(
     crs = cartopy.crs.epsg(source.crs.to_epsg())
 
     ax = plt.axes(projection=crs)
+    #     ax.set_facecolor('black')
 
     show(
         source, cmap=cmap, ax=ax, interpolation="none", vmin=vmin, vmax=vmax, alpha=0.5
@@ -184,8 +189,7 @@ def plot_tif_with_polygons(
     ]
     ax.legend(handles=patches)
     ax.set_title(file_name.split("_")[-1])
-    #     ax.set_facecolor('black')
-    #     ax.fill_between([0,1],[1,1],hatch="X")
+    #         ax.fill_between([0,1],[1,1],hatch="X")
 
     fig.savefig(
         os.path.join(output_directory, qc_plot_file_name + ".jpg"),

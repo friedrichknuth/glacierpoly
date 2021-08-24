@@ -469,7 +469,7 @@ def run_detection(
                 merged_polygon_file,
                 output_directory,
                 suffix="_01_dod_and_outlines",
-                cmap="RdBu",
+                cmap_name="RdBu",
                 vmin=-10,
                 vmax=10,
             )
@@ -481,7 +481,7 @@ def run_detection(
                     merged_polygon_file,
                     output_directory,
                     suffix="_02_ortho_and_outlines",
-                    cmap="Greys",
+                    cmap_name="Greys",
                 )
 
             print("SUCCESS\n")
