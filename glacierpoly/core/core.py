@@ -185,6 +185,7 @@ def detect_glacier(
     array,
     erode_islands=True,
     erode_islands_search_window=(9, 9),
+    dilation_iterations=4,
 ):
     """
     Finds glacier in uint8 array of difference map values.
@@ -205,10 +206,15 @@ def detect_glacier(
 
     # dilate edges
     dilate_edges_window = np.ones((3, 3)).astype(int)
-    multi_dilated = gpoly.core.multi_dil(canny, 4, dilate_edges_window)
+    multi_dilated = gpoly.core.multi_dil(
+        canny, dilation_iterations, dilate_edges_window
+    )
 
     # close areas
     area_closed = area_closing(multi_dilated, 1e6)
+
+    #     # erode areas
+    #     multi_eroded = multi_ero(area_closed, 1, dilate_edges_window)
 
     # label areas
     label_im = label(area_closed)
@@ -374,6 +380,7 @@ def run_detection(
     reference_dem_file,
     difference_maps_files,
     reference_glacier_polygon_file,
+    dilation_iterations=4,
     ortho_files=None,
     output_directory="outputs",
 ):
@@ -393,7 +400,9 @@ def run_detection(
             difference_map_file, reference_glacier_polygon_file, buffer_distance=2000
         )
 
-        arrays = gpoly.core.detect_glacier(array, erode_islands=True)
+        arrays = gpoly.core.detect_glacier(
+            array, erode_islands=True, dilation_iterations=dilation_iterations
+        )
 
         detected_array = arrays[-1]
         detected_polygon_gdf = gpoly.core.convert_glacier_array_to_gdf(
@@ -406,7 +415,9 @@ def run_detection(
 
         if detected_polygon_gdf.empty:
             print("reattempting detection without eroding islands")
-            arrays = gpoly.core.detect_glacier(array, erode_islands=False)
+            arrays = gpoly.core.detect_glacier(
+                array, erode_islands=False, dilation_iterations=dilation_iterations
+            )
             detected_array = arrays[-1]
             detected_polygon_gdf = gpoly.core.convert_glacier_array_to_gdf(
                 detected_array, transform, res, crs
