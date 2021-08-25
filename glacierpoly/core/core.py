@@ -473,6 +473,7 @@ def run_detection(
                 cbar_label="Elevation difference [m]",
                 vmin=-10,
                 vmax=10,
+                bad_value_color="black",
             )
 
             if ortho_files:
@@ -482,7 +483,8 @@ def run_detection(
                     merged_polygon_file,
                     output_directory,
                     suffix="_02_ortho_and_outlines",
-                    cmap_name="Greys"
+                    cmap_name="Greys",
+                    bad_value_color="yellow",
                 )
 
             print("SUCCESS\n")
