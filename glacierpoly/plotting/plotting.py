@@ -124,6 +124,7 @@ def plot_tif_with_polygons(
     output_directory,
     suffix=None,
     cmap_name=None,
+    cbar_label = None,
     vmin=None,
     vmax=None,
     cbar_fraction=0.035,
@@ -160,7 +161,7 @@ def plot_tif_with_polygons(
     cb = fig.colorbar(
         sm, ax=ax, fraction=cbar_fraction, pad=0.001, extend="both", aspect=50
     )
-    cb.set_label(label="Elevation difference [m]", size=15)
+    cb.set_label(label=cbar_label, size=15)
     cb.ax.tick_params(labelsize=12)
 
     reference_glacier_polygon = gpd.read_file(reference_glacier_polygon_file)
