@@ -124,14 +124,18 @@ def plot_tif_with_polygons(
     output_directory,
     suffix=None,
     cmap_name=None,
-    cbar_label = None,
+    cbar_label=None,
+    bad_value_color="none",
+    alpha=1,
     vmin=None,
     vmax=None,
+    vmin_percentile=30,  # values for orthos 0-255
+    vmax_percentile=99,  # values for orthos 0-255
     cbar_fraction=0.035,
 ):
 
     cmap = copy.copy(plt.cm.get_cmap(cmap_name))
-    cmap.set_bad(color="black", alpha=1)
+    cmap.set_bad(color=bad_value_color)
 
     Path(output_directory).mkdir(parents=True, exist_ok=True)
     file_name = str(Path(difference_map_file).stem)
@@ -143,11 +147,11 @@ def plot_tif_with_polygons(
         array = source.read(1)
         array = array.astype(float)
         array = gpoly.core.replace_and_fill_nodata_value(array, source.nodata, np.nan)
-        vmin, vmax = np.nanpercentile(array, [5, 95])
+        vmin, vmax = np.nanpercentile(array, [vmin_percentile, vmax_percentile])
 
     fig, ax = plt.subplots(figsize=(10, 10))
 
-    sm = ax.imshow(source.read(1), cmap=cmap, vmin=vmin, vmax=vmax, alpha=0.5)
+    sm = ax.imshow(source.read(1), cmap=cmap, vmin=vmin, vmax=vmax, alpha=alpha)
 
     crs = cartopy.crs.epsg(source.crs.to_epsg())
 
@@ -155,7 +159,13 @@ def plot_tif_with_polygons(
     #     ax.set_facecolor('black')
 
     show(
-        source, cmap=cmap, ax=ax, interpolation="none", vmin=vmin, vmax=vmax, alpha=0.5
+        source,
+        cmap=cmap,
+        ax=ax,
+        interpolation="none",
+        vmin=vmin,
+        vmax=vmax,
+        alpha=alpha,
     )
 
     cb = fig.colorbar(
@@ -167,8 +177,8 @@ def plot_tif_with_polygons(
     reference_glacier_polygon = gpd.read_file(reference_glacier_polygon_file)
     merged_polygon = gpd.read_file(merged_polygon_file)
 
-    reference_glacier_polygon.plot(ax=ax, facecolor="none", edgecolor="b")
-    merged_polygon.plot(ax=ax, facecolor="none", edgecolor="g")
+    reference_glacier_polygon.plot(ax=ax, facecolor="none", edgecolor="b", linewidth=2)
+    merged_polygon.plot(ax=ax, facecolor="none", edgecolor="g", linewidth=2)
 
     if reference_glacier_polygon.geometry.area[0] > merged_polygon.geometry.area[0]:
         tmp_poly = reference_glacier_polygon
