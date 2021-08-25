@@ -289,6 +289,24 @@ def get_raster_metadata(geotif):
     return transform, res, crs
 
 
+def remove_inlet_islands(gdf, buffer_distance=10):
+    """
+    get rid of interior islands if inlet seperated by buffer
+    """
+    tmp = (
+        gpd.GeoDataFrame(geometry=gdf.buffer(buffer_distance))
+        .dissolve()
+        .explode()
+        .reset_index()
+        .iloc[:, 2:]
+    )
+    tmp = tmp[tmp.area == tmp.area.max()]
+    input_l = tmp.geometry.exterior.reset_index(drop=True).iloc[0]
+    gdf = gdf.geometry.append(gpd.GeoSeries([Polygon(input_l.coords)]))
+    gdf = gpd.GeoDataFrame(geometry=gdf).dissolve()
+    return gdf
+
+
 def merge_with_undetected_high_elevation_areas(
     reference_dem_file,
     reference_glacier_polygon_file,
@@ -329,8 +347,10 @@ def merge_with_undetected_high_elevation_areas(
     res_union["max_elevations"] = max_elevations
     res_union["counts"] = counts
 
-    # merge where elevations area higher
+    # select reference glacier polygon areas where elevations area higher
     remaining_area = res_union[res_union["max_elevations"] > max_elevation - 200]
+
+    # merge reference glacier polygon areas where elevations area higher
     merged = detected_polygon_gdf.geometry.append(remaining_area.geometry)
     merged = gpd.GeoDataFrame(geometry=merged).reset_index(drop=True)
 
@@ -342,13 +362,6 @@ def merge_with_undetected_high_elevation_areas(
         geoms.append(Polygon(merged["geometry"].iloc[i].exterior))
     merged["geometry"] = geoms
     merged = merged.dissolve()
-
-    #     # get rid of interior islands if inlet seperated by 10
-    #     tmp = gpd.GeoDataFrame(geometry=merged.buffer(10)).dissolve().explode().reset_index().iloc[: , 2:]
-    #     tmp = tmp[tmp.area == tmp.area.max()]
-    #     input_l = tmp.geometry.exterior.reset_index(drop=True).iloc[0]
-    #     merged = merged.geometry.append(gpd.GeoSeries([Polygon(input_l.coords)]))
-    #     merged = gpd.GeoDataFrame(geometry=merged).dissolve()
 
     return merged
 
@@ -422,6 +435,7 @@ def run_detection(
             detected_polygon_gdf = gpoly.core.convert_glacier_array_to_gdf(
                 detected_array, transform, res, crs
             )
+
             detected_polygon_gdf = (
                 gpoly.core.find_largest_intersecting_detected_polygon(
                     reference_glacier_polygon_file, detected_polygon_gdf
@@ -431,6 +445,7 @@ def run_detection(
                 print("cant detect glacier for", difference_map_file)
                 break
 
+        # get rid of interior islands if inlet seperated by 10 m
         detected_polygon_gdf = gpoly.core.clip_area_beyond_previous_glacier_boundary(
             reference_glacier_polygon_file, detected_polygon_gdf
         )
@@ -446,6 +461,11 @@ def run_detection(
                 reference_dem_file,
                 reference_glacier_polygon_file,
                 detected_polygon_file,
+            )
+            merged = gpoly.core.remove_inlet_islands(merged, buffer_distance=10)
+
+            merged = gpoly.core.clip_area_beyond_previous_glacier_boundary(
+                reference_glacier_polygon_file, merged
             )
 
             gpoly.plotting.create_detection_qc_gallery(
