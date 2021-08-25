@@ -69,7 +69,7 @@ def create_detection_qc_gallery(
     fig.savefig(
         os.path.join(output_directory, qc_plot_file_name + ".jpg"),
         bbox_inches="tight",
-        pad_inches=0,
+        pad_inches=0.1,
     )
     plt.close()
 
@@ -208,6 +208,6 @@ def plot_tif_with_polygons(
     fig.savefig(
         os.path.join(output_directory, qc_plot_file_name + ".jpg"),
         bbox_inches="tight",
-        pad_inches=0,
+        pad_inches=0.1,
     )
     plt.close()
