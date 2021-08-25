@@ -39,7 +39,10 @@ def create_detection_qc_gallery(
         try:
             arr = arrays[i]
             ax = plt.subplot(rows, columns, i + 1)
-            ax.imshow(arr)
+            if labels[i] == "canny edges" or labels[i] == "dilated edges":
+                ax.imshow(arr, vmin=0, vmax=1)
+            else:
+                ax.imshow(arr)
             ax.set_xticks(())
             ax.set_yticks(())
             ax.set_title(labels[i])
